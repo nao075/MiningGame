@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Twitch Mining Game Overlay</title>
+    <title>Twitch Mining Game ID-Based</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
             color: white;
             text-shadow: 2px 2px 4px #000;
         }
@@ -15,96 +15,127 @@
             width: 100vw;
             height: 100vh;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
         }
-        .mining-log {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 24px;
-            transition: all 0.5s ease;
+        .mining-box {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #555;
+            text-align: center;
+            min-width: 400px;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             opacity: 0;
+            transform: scale(0.8);
         }
-        .show { opacity: 1; }
-        .gold { color: gold; font-weight: bold; }
-        .diamond { color: #00ffff; font-weight: bold; }
+        .mining-box.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.2em; }
+        .item-name { font-size: 1.5em; margin: 10px 0; display: block; }
+        .gold { color: gold; }
+        .diamond { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
         .stone { color: #aaa; }
+        .total-score { font-size: 0.9em; color: #ccc; margin-top: 10px; border-top: 1px solid #444; padding-top: 5px; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <div id="display" class="mining-log">!採掘 とチャットしてね！</div>
+    <div id="display-box" class="mining-box">
+        チャットで !採掘 と打ってね！
+    </div>
 </div>
 
 <script>
-// --- 設定項目 ---
+// --- 設定 ---
 const CHANNEL_NAME = 'nao075'; 
 const COMMAND = '!採掘';
 
-// ユーザーごとの所持金データ (セッション中のみ保持)
-const userBalances = {};
+// --- データの読み込み (localStorage) ---
+// 構造: { "12345678": { name: "Tanaka", balance: 5000 }, ... }
+const storageKey = `mining_data_${CHANNEL_NAME}`;
+let userData = JSON.parse(localStorage.getItem(storageKey)) || {};
 
-// Twitch WebSocketへの接続
+// WebSocket接続
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-    socket.send('PASS SCHMOOPIE'); // パスワードはダミーでOK
-    socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`); // 読み取り専用ログイン
-    socket.send(`JOIN #${CHANNEL_NAME}`);
-    console.log("Twitchに接続しました");
+    socket.send('PASS SCHMOOPIE');
+    socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`);
+    socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
+    console.log("Twitch ID管理システム 起動完了");
 };
 
 socket.onmessage = (event) => {
-    const data = event.data;
-    
-    // チャットメッセージの解析
-    if (data.includes('PRIVMSG')) {
-        const displayName = data.match(/display-name=([^;]+)/)?.[1];
-        const message = data.split('PRIVMSG')[1].split(' :')[1].trim();
+    const rawData = event.data;
+    if (rawData.includes('PRIVMSG')) {
+        // タグから user-id と display-name を抽出
+        const userId = rawData.match(/user-id=([^;]+)/)?.[1];
+        const displayName = rawData.match(/display-name=([^;]+)/)?.[1];
+        const message = rawData.split('PRIVMSG')[1].split(' :')[1]?.trim();
 
-        if (message === COMMAND) {
-            handleMining(displayName);
+        if (message === COMMAND && userId) {
+            handleMining(userId, displayName);
         }
     }
 };
 
-function handleMining(user) {
+function handleMining(uid, name) {
     const result = Math.random() * 100;
-    let item = "";
-    let value = 0;
-    let colorClass = "";
+    let item, value, colorClass;
 
-    // 確率設定
-    if (result > 95) {
-        item = "ダイヤモンド"; value = 5000; colorClass = "diamond";
-    } else if (result > 70) {
-        item = "金鉱石"; value = 500; colorClass = "gold";
-    } else if (result > 30) {
-        item = "鉄くず"; value = 50; colorClass = "";
+    // 抽選
+    if (result > 98) {
+        item = "伝説のダイアモンド"; value = 10000; colorClass = "diamond";
+    } else if (result > 85) {
+        item = "金の延べ棒"; value = 1500; colorClass = "gold";
+    } else if (result > 50) {
+        item = "鉄の塊"; value = 200; colorClass = "";
     } else {
-        item = "ただの石ころ"; value = 0; colorClass = "stone";
+        item = "石ころ"; value = 0; colorClass = "stone";
     }
 
-    // データの加算
-    if (!userBalances[user]) userBalances[user] = 0;
-    userBalances[user] += value;
-
-    // 画面表示の更新
-    const display = document.getElementById('display');
-    display.innerHTML = `
-        <div><span class="gold">${user}</span> が採掘開始...</div>
-        <div class="${colorClass}">【${item}】を発掘！（+${value}G）</div>
-        <div style="font-size: 0.7em;">現在の合計: ${userBalances[user]}G</div>
-    `;
+    // データの更新 (IDで紐付け)
+    if (!userData[uid]) {
+        userData[uid] = { name: name, balance: 0 };
+    }
     
-    // アニメーション
-    display.classList.remove('show');
-    void display.offsetWidth; // リフロー
-    display.classList.add('show');
+    // 表示名は最新のものに更新
+    userData[uid].name = name;
+    userData[uid].balance += value;
+
+    // 保存
+    localStorage.setItem(storageKey, JSON.stringify(userData));
+
+    // 画面表示
+    updateDisplay(name, item, value, userData[uid].balance, colorClass);
+}
+
+let hideTimeout;
+function updateDisplay(name, item, value, total, colorClass) {
+    const box = document.getElementById('display-box');
+    
+    box.innerHTML = `
+        <div class="user-name">${name}</div>
+        <div class="item-name ${colorClass}">⛏️ ${item}</div>
+        <div>+${value.toLocaleString()} G 獲得！</div>
+        <div class="total-score">現在の総資産: ${total.toLocaleString()} G</div>
+    `;
+
+    // アニメーション制御
+    box.classList.remove('show');
+    void box.offsetWidth; 
+    box.classList.add('show');
+
+    // 5秒後に非表示にする
+    clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(() => {
+        box.classList.remove('show');
+    }, 5000);
 }
 </script>
 </body>
