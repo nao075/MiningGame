@@ -2,65 +2,75 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Fantasy & Danger Mining</title>
+    <title>NAO075 High-Visibility Mining</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
         #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         
         .mining-box {
             background: rgba(0, 0, 0, 0.9);
-            padding: 30px; border-radius: 20px; border: 4px solid #6441a5;
-            text-align: center; width: 500px; box-sizing: border-box;
+            padding: 15px 25px; border-radius: 15px; border: 4px solid #6441a5;
+            text-align: center; width: 480px; box-sizing: border-box;
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            opacity: 0; transform: scale(0.5) rotate(-5deg);
+            opacity: 0; transform: scale(0.5);
+            line-height: 1.2; /* 行間を詰める */
         }
-        .mining-box.show { opacity: 1; transform: scale(1) rotate(0deg); }
+        .mining-box.show { opacity: 1; transform: scale(1); }
 
-        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-        .item-name { font-size: 2.2em; margin: 15px 0; display: block; font-weight: bold; }
+        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.4em; margin-bottom: 2px; }
+        
+        .item-name { font-size: 2.4em; margin: 5px 0; font-weight: 900; letter-spacing: -1px; }
 
         /* 特殊クラス設定 */
         .stone { color: #aaaaaa; }
         .gold { color: #ffd700; text-shadow: 0 0 10px #ffd700; }
         .diamond { color: #00ffff; text-shadow: 0 0 20px #00ffff; }
-        
-        /* 伝説級: 虹色に光り輝く */
-        .legend {
-            background: linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px white);
-            animation: rainbow 2s linear infinite;
-        }
-        @keyframes rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 10px white); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 10px white); } }
-
-        /* 危険級: 赤く震える */
+        .legend { animation: rainbow 2s linear infinite; font-weight: 900; }
+        @keyframes rainbow { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
         .danger { color: #ff4444; animation: shake 0.2s infinite; }
-        /* 深淵級: 画面が闇に染まるような黒紫の光 */
-        .abyss { color: #ff00ff; text-shadow: 0 0 20px #ff00ff, 0 0 40px #000; animation: shake 0.1s infinite; }
+        .abyss { color: #ff00ff; text-shadow: 0 0 20px #ff00ff; animation: shake 0.1s infinite; }
+        @keyframes shake { 0% { transform: translate(2px,2px); } 50% { transform: translate(-2px,-2px); } 100% { transform: translate(0,0); } }
 
-        @keyframes shake { 0% { transform: translate(0,0); } 25% { transform: translate(3px,3px); } 50% { transform: translate(-3px,0); } 100% { transform: translate(0,0); } }
-
-        .value-gain { font-size: 1.5em; font-weight: bold; }
+        /* 今回の獲得額 */
+        .value-gain { font-size: 1.8em; font-weight: bold; margin-bottom: 10px; }
         .minus { color: #ff3333; }
-        .total-score { font-size: 1em; color: #ccc; margin-top: 15px; border-top: 2px solid #444; padding-top: 10px; }
+
+        /* --- 総資産のデザインを大幅強化 --- */
+        .total-score-container {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .total-label { font-size: 1em; color: #ddd; margin-bottom: -5px; }
+        .total-amount { 
+            font-size: 3.2em; /* 文字サイズを最大化 */
+            font-weight: 900; 
+            color: #ffffff; 
+            display: block;
+            letter-spacing: -2px;
+        }
+        .total-unit { font-size: 0.5em; margin-left: 5px; vertical-align: middle; }
     </style>
 </head>
 <body>
-    <div id="overlay"><div id="display-box" class="mining-box">魔力充填中...</div></div>
+    <div id="overlay"><div id="display-box" class="mining-box">読み込み中...</div></div>
 
 <script>
 const CHANNEL_NAME = 'nao075';
 const COMMAND = '!採掘';
-const RANK_CHANCES = { 1: 55, 2: 25, 3: 12, 4: 6, 5: 2 }; // 伝説を2%にアップ
+const RANK_CHANCES = { 1: 55, 2: 25, 3: 12, 4: 6, 5: 2 };
 
 let userData = {};
 let miningList = [];
 
 async function loadData() {
-    const res = await fetch('data.json');
-    miningList = await res.json();
-    document.getElementById('display-box').innerText = "採掘準備完了！";
+    try {
+        const res = await fetch('data.json');
+        miningList = await res.json();
+        document.getElementById('display-box').innerText = "!採掘 でスタート";
+    } catch(e) { document.getElementById('display-box').innerText = "JSONエラー"; }
 }
 loadData();
 
@@ -97,26 +107,30 @@ socket.onmessage = (e) => {
             userData[uid].name = name;
             userData[uid].balance += item.value;
             
-            // 枠の色をレア度で変える
             const box = document.getElementById('display-box');
             box.style.borderColor = item.rank === 5 ? "gold" : (item.value < 0 ? "red" : "#6441a5");
 
-            showOverlay(name, item);
+            showOverlay(name, item, userData[uid].balance);
         }
     }
 };
 
 let tid;
-function showOverlay(name, item) {
+function showOverlay(name, item, currentTotal) {
     const box = document.getElementById('display-box');
     const valText = item.value < 0 ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
     
     box.innerHTML = `
         <div class="user-name">${name}</div>
         <div class="item-name ${item.class}">${item.value < 0 ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
-        <div class="value-gain">${item.value === 0 ? "ゴミ..." : valText}</div>
-        <div class="total-score">総資産: ${userData[Object.keys(userData).find(k => userData[k].name === name)].balance.toLocaleString()} G</div>
+        <div class="value-gain">${item.value === 0 ? "価値なし" : valText}</div>
+        
+        <div class="total-score-container">
+            <div class="total-label">現在の総資産</div>
+            <div class="total-amount">${currentTotal.toLocaleString()}<span class="total-unit">G</span></div>
+        </div>
     `;
+
     box.classList.remove('show');
     void box.offsetWidth;
     box.classList.add('show');
