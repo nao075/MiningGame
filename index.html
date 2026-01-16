@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Twitch Mining Game ID-Based</title>
+    <title>NAO075 Mining Overlay</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             color: white;
             text-shadow: 2px 2px 4px #000;
         }
@@ -18,68 +18,106 @@
             justify-content: center;
             align-items: center;
         }
+        /* 枠の設定：サイズを固定してレイアウト崩れを防止 */
         .mining-box {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 15px;
-            border: 2px solid #555;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 25px;
+            border-radius: 20px;
+            border: 3px solid #6441a5; /* Twitchカラーのパープル */
             text-align: center;
-            min-width: 400px;
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            width: 450px;
+            box-sizing: border-box;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             opacity: 0;
-            transform: scale(0.8);
+            transform: scale(0.7);
         }
         .mining-box.show {
             opacity: 1;
             transform: scale(1);
         }
-        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.2em; }
-        .item-name { font-size: 1.5em; margin: 10px 0; display: block; }
-        .gold { color: gold; }
-        .diamond { color: #00ffff; text-shadow: 0 0 10px #00ffff; }
-        .stone { color: #aaa; }
-        .total-score { font-size: 0.9em; color: #ccc; margin-top: 10px; border-top: 1px solid #444; padding-top: 5px; }
+
+        /* 長い名前対策：枠を超えたら自動で「...」にする */
+        .user-name {
+            color: #bf94ff;
+            font-weight: bold;
+            font-size: 1.4em;
+            display: block;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 10px;
+        }
+
+        .item-name {
+            font-size: 1.8em;
+            margin: 10px 0;
+            display: block;
+            font-weight: bold;
+        }
+        .gold { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .diamond { color: #00ffff; text-shadow: 0 0 15px rgba(0, 255, 255, 0.8); }
+        .stone { color: #aaaaaa; }
+        
+        .value-gain {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .total-score {
+            font-size: 0.9em;
+            color: #bbbbbb;
+            margin-top: 15px;
+            border-top: 1px solid #444;
+            padding-top: 10px;
+        }
     </style>
 </head>
 <body>
 
 <div id="overlay">
     <div id="display-box" class="mining-box">
-        チャットで !採掘 と打ってね！
+        !採掘 とチャットしてね！
     </div>
 </div>
 
 <script>
-// --- 設定 ---
-const CHANNEL_NAME = 'nao075'; 
+// --- 固定設定 ---
+const CHANNEL_NAME = 'nao075'; // チャンネル名を固定
 const COMMAND = '!採掘';
 
 // --- データの読み込み (localStorage) ---
-// 構造: { "12345678": { name: "Tanaka", balance: 5000 }, ... }
 const storageKey = `mining_data_${CHANNEL_NAME}`;
 let userData = JSON.parse(localStorage.getItem(storageKey)) || {};
 
-// WebSocket接続
+// Twitch WebSocketへの接続 (tmi.js不要)
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-    socket.send('PASS SCHMOOPIE');
+    socket.send('PASS SCHMOOPIE'); // 読み取り専用はこれでOK
     socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`);
-    socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
-    console.log("Twitch ID管理システム 起動完了");
+    socket.send(`JOIN #${CHANNEL_NAME}`);
+    console.log(`${CHANNEL_NAME} のチャット監視を開始しました`);
 };
 
 socket.onmessage = (event) => {
     const rawData = event.data;
+    
+    // PING-PONG（接続維持用）
+    if (rawData.startsWith('PING')) {
+        socket.send('PONG :tmi.twitch.tv');
+        return;
+    }
+
     if (rawData.includes('PRIVMSG')) {
-        // タグから user-id と display-name を抽出
         const userId = rawData.match(/user-id=([^;]+)/)?.[1];
         const displayName = rawData.match(/display-name=([^;]+)/)?.[1];
-        const message = rawData.split('PRIVMSG')[1].split(' :')[1]?.trim();
+        const messageParts = rawData.split('PRIVMSG')[1].split(' :');
+        const message = messageParts.slice(1).join(' :').trim();
 
         if (message === COMMAND && userId) {
-            handleMining(userId, displayName);
+            handleMining(userId, displayName || "不明なユーザー");
         }
     }
 };
@@ -88,13 +126,13 @@ function handleMining(uid, name) {
     const result = Math.random() * 100;
     let item, value, colorClass;
 
-    // 抽選
+    // 抽選テーブル
     if (result > 98) {
-        item = "伝説のダイアモンド"; value = 10000; colorClass = "diamond";
-    } else if (result > 85) {
-        item = "金の延べ棒"; value = 1500; colorClass = "gold";
-    } else if (result > 50) {
-        item = "鉄の塊"; value = 200; colorClass = "";
+        item = "伝説のダイヤ"; value = 10000; colorClass = "diamond";
+    } else if (result > 80) {
+        item = "金鉱石"; value = 1500; colorClass = "gold";
+    } else if (result > 40) {
+        item = "鉄くず"; value = 100; colorClass = "";
     } else {
         item = "石ころ"; value = 0; colorClass = "stone";
     }
@@ -104,11 +142,11 @@ function handleMining(uid, name) {
         userData[uid] = { name: name, balance: 0 };
     }
     
-    // 表示名は最新のものに更新
+    // 最新の名前を保存し、値を加算
     userData[uid].name = name;
     userData[uid].balance += value;
 
-    // 保存
+    // ローカルストレージに保存（リロード対策）
     localStorage.setItem(storageKey, JSON.stringify(userData));
 
     // 画面表示
@@ -119,23 +157,26 @@ let hideTimeout;
 function updateDisplay(name, item, value, total, colorClass) {
     const box = document.getElementById('display-box');
     
+    // 獲得金額の表示テキスト
+    const gainText = value > 0 ? `+${value.toLocaleString()} G 獲得！` : "残念...";
+
     box.innerHTML = `
         <div class="user-name">${name}</div>
         <div class="item-name ${colorClass}">⛏️ ${item}</div>
-        <div>+${value.toLocaleString()} G 獲得！</div>
+        <div class="value-gain">${gainText}</div>
         <div class="total-score">現在の総資産: ${total.toLocaleString()} G</div>
     `;
 
-    // アニメーション制御
+    // アニメーション実行
     box.classList.remove('show');
-    void box.offsetWidth; 
+    void box.offsetWidth; // リフロー強制
     box.classList.add('show');
 
-    // 5秒後に非表示にする
+    // 7秒後に非表示にする（少し長めに設定）
     clearTimeout(hideTimeout);
     hideTimeout = setTimeout(() => {
         box.classList.remove('show');
-    }, 5000);
+    }, 7000);
 }
 </script>
 </body>
