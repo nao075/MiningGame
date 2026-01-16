@@ -108,6 +108,15 @@ function showOverlay(name, item, currentTotal) {
     const box = document.getElementById('display-box');
     const valText = item.value < 0 ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
     
+    // --- 桁数に応じたフォントサイズ調整 ---
+    const totalStr = currentTotal.toLocaleString();
+    let fontSize = "3.8em"; // デフォルト（数千万まで）
+    if (totalStr.length > 12) {
+        fontSize = "2.4em"; // 1000億〜
+    } else if (totalStr.length > 9) {
+        fontSize = "3.0em"; // 1億〜
+    }
+
     box.innerHTML = `
         <div class="user-name">${name}</div>
         <div class="item-name ${item.class}">${item.value < 0 ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
@@ -115,7 +124,7 @@ function showOverlay(name, item, currentTotal) {
         
         <div class="total-score-container">
             <div class="total-label">現在の総資産</div>
-            <div class="total-amount">${currentTotal.toLocaleString()}<span class="total-unit">G</span></div>
+            <div class="total-amount" style="font-size: ${fontSize}">${totalStr}<span class="total-unit">G</span></div>
         </div>
     `;
 
