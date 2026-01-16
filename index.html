@@ -106,25 +106,40 @@ socket.onmessage = (e) => {
 let tid;
 function showOverlay(name, item, currentTotal) {
     const box = document.getElementById('display-box');
-    const valText = item.value < 0 ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
+    const isLoss = item.value < 0;
+    const valText = isLoss 
+        ? `<span class="minus">${item.value.toLocaleString()} G</span>` 
+        : `+${item.value.toLocaleString()} G`;
     
-    // --- 桁数に応じたフォントサイズ調整 ---
-    const totalStr = currentTotal.toLocaleString();
-    let fontSize = "3.8em"; // デフォルト（数千万まで）
-    if (totalStr.length > 12) {
-        fontSize = "2.4em"; // 1000億〜
-    } else if (totalStr.length > 9) {
-        fontSize = "3.0em"; // 1億〜
+    // --- 表示用金額の整形（単位変換） ---
+    let displayTotal = "";
+    const absTotal = Math.abs(currentTotal); // 判定用に絶対値をとる
+
+    if (absTotal >= 100000000) { // 1億以上
+        displayTotal = (currentTotal / 100000000).toFixed(2) + " 億";
+    } else if (absTotal >= 10000) { // 1万以上
+        displayTotal = (currentTotal / 10000).toFixed(1) + " 万";
+    } else {
+        displayTotal = currentTotal.toLocaleString();
     }
+
+    // --- 桁数に応じたフォントサイズ調整 ---
+    // マイナス記号分を考慮し、文字列の長さで判定
+    const totalStr = displayTotal.toString();
+    let fontSize = "3.8em"; 
+    if (totalStr.length > 8) fontSize = "2.8em";
+    if (totalStr.length > 11) fontSize = "2.2em";
 
     box.innerHTML = `
         <div class="user-name">${name}</div>
-        <div class="item-name ${item.class}">${item.value < 0 ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
+        <div class="item-name ${item.class}">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
         <div class="value-gain">${item.value === 0 ? "ハズレ" : valText}</div>
         
         <div class="total-score-container">
             <div class="total-label">現在の総資産</div>
-            <div class="total-amount" style="font-size: ${fontSize}">${totalStr}<span class="total-unit">G</span></div>
+            <div class="total-amount" style="font-size: ${fontSize}; ${currentTotal < 0 ? 'color: #ff6666;' : ''}">
+                ${displayTotal}<span class="total-unit">G</span>
+            </div>
         </div>
     `;
 
