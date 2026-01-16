@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Twitch Mining Game Overlay</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #overlay {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .mining-log {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 24px;
+            transition: all 0.5s ease;
+            opacity: 0;
+        }
+        .show { opacity: 1; }
+        .gold { color: gold; font-weight: bold; }
+        .diamond { color: #00ffff; font-weight: bold; }
+        .stone { color: #aaa; }
+    </style>
+</head>
+<body>
+
+<div id="overlay">
+    <div id="display" class="mining-log">!採掘 とチャットしてね！</div>
+</div>
+
+<script>
+// --- 設定項目 ---
+const CHANNEL_NAME = 'nao075'; 
+const COMMAND = '!採掘';
+
+// ユーザーごとの所持金データ (セッション中のみ保持)
+const userBalances = {};
+
+// Twitch WebSocketへの接続
+const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+
+socket.onopen = () => {
+    socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    socket.send('PASS SCHMOOPIE'); // パスワードはダミーでOK
+    socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`); // 読み取り専用ログイン
+    socket.send(`JOIN #${CHANNEL_NAME}`);
+    console.log("Twitchに接続しました");
+};
+
+socket.onmessage = (event) => {
+    const data = event.data;
+    
+    // チャットメッセージの解析
+    if (data.includes('PRIVMSG')) {
+        const displayName = data.match(/display-name=([^;]+)/)?.[1];
+        const message = data.split('PRIVMSG')[1].split(' :')[1].trim();
+
+        if (message === COMMAND) {
+            handleMining(displayName);
+        }
+    }
+};
+
+function handleMining(user) {
+    const result = Math.random() * 100;
+    let item = "";
+    let value = 0;
+    let colorClass = "";
+
+    // 確率設定
+    if (result > 95) {
+        item = "ダイヤモンド"; value = 5000; colorClass = "diamond";
+    } else if (result > 70) {
+        item = "金鉱石"; value = 500; colorClass = "gold";
+    } else if (result > 30) {
+        item = "鉄くず"; value = 50; colorClass = "";
+    } else {
+        item = "ただの石ころ"; value = 0; colorClass = "stone";
+    }
+
+    // データの加算
+    if (!userBalances[user]) userBalances[user] = 0;
+    userBalances[user] += value;
+
+    // 画面表示の更新
+    const display = document.getElementById('display');
+    display.innerHTML = `
+        <div><span class="gold">${user}</span> が採掘開始...</div>
+        <div class="${colorClass}">【${item}】を発掘！（+${value}G）</div>
+        <div style="font-size: 0.7em;">現在の合計: ${userBalances[user]}G</div>
+    `;
+    
+    // アニメーション
+    display.classList.remove('show');
+    void display.offsetWidth; // リフロー
+    display.classList.add('show');
+}
+</script>
+</body>
+</html>
