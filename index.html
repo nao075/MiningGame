@@ -2,119 +2,126 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Variety Mining</title>
+    <title>NAO075 Fantasy & Danger Mining</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            color: white;
-            text-shadow: 2px 2px 4px #000;
-        }
-        #overlay {
-            width: 100vw; height: 100vh;
-            display: flex; justify-content: center; align-items: center;
-        }
+        body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
+        #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        
         .mining-box {
-            background: rgba(0, 0, 0, 0.85);
-            padding: 25px; border-radius: 20px; border: 3px solid #6441a5;
-            text-align: center; width: 450px; box-sizing: border-box;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            opacity: 0; transform: scale(0.7);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px; border-radius: 20px; border: 4px solid #6441a5;
+            text-align: center; width: 500px; box-sizing: border-box;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0; transform: scale(0.5) rotate(-5deg);
         }
-        .mining-box.show { opacity: 1; transform: scale(1); }
-        .user-name {
-            color: #bf94ff; font-weight: bold; font-size: 1.4em;
-            display: block; width: 100%; white-space: nowrap;
-            overflow: hidden; text-overflow: ellipsis; margin-bottom: 10px;
-        }
-        .item-name { font-size: 1.8em; margin: 10px 0; display: block; font-weight: bold; }
-        .gold { color: #ffd700; }
-        .diamond { color: #00ffff; text-shadow: 0 0 15px #00ffff; }
+        .mining-box.show { opacity: 1; transform: scale(1) rotate(0deg); }
+
+        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+        .item-name { font-size: 2.2em; margin: 15px 0; display: block; font-weight: bold; }
+
+        /* 特殊クラス設定 */
         .stone { color: #aaaaaa; }
-        .value-gain { font-size: 1.2em; margin-bottom: 10px; }
-        .total-score { font-size: 0.9em; color: #bbbbbb; margin-top: 15px; border-top: 1px solid #444; padding-top: 10px; }
+        .gold { color: #ffd700; text-shadow: 0 0 10px #ffd700; }
+        .diamond { color: #00ffff; text-shadow: 0 0 20px #00ffff; }
+        
+        /* 伝説級: 虹色に光り輝く */
+        .legend {
+            background: linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px white);
+            animation: rainbow 2s linear infinite;
+        }
+        @keyframes rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 10px white); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 10px white); } }
+
+        /* 危険級: 赤く震える */
+        .danger { color: #ff4444; animation: shake 0.2s infinite; }
+        /* 深淵級: 画面が闇に染まるような黒紫の光 */
+        .abyss { color: #ff00ff; text-shadow: 0 0 20px #ff00ff, 0 0 40px #000; animation: shake 0.1s infinite; }
+
+        @keyframes shake { 0% { transform: translate(0,0); } 25% { transform: translate(3px,3px); } 50% { transform: translate(-3px,0); } 100% { transform: translate(0,0); } }
+
+        .value-gain { font-size: 1.5em; font-weight: bold; }
+        .minus { color: #ff3333; }
+        .total-score { font-size: 1em; color: #ccc; margin-top: 15px; border-top: 2px solid #444; padding-top: 10px; }
     </style>
 </head>
 <body>
-
-<div id="overlay">
-    <div id="display-box" class="mining-box">データを読み込み中...</div>
-</div>
+    <div id="overlay"><div id="display-box" class="mining-box">魔力充填中...</div></div>
 
 <script>
 const CHANNEL_NAME = 'nao075';
 const COMMAND = '!採掘';
-let userData = {}; // リロードでリセット
-let miningList = []; // 外部リストを保持
+const RANK_CHANCES = { 1: 55, 2: 25, 3: 12, 4: 6, 5: 2 }; // 伝説を2%にアップ
 
-// 1. 外部JSONファイルの読み込み
-async function loadMiningData() {
-    try {
-        const response = await fetch('data.json');
-        miningList = await response.json();
-        document.getElementById('display-box').innerText = "!採掘 とチャットしてね！";
-    } catch (e) {
-        document.getElementById('display-box').innerText = "JSON読み込み失敗";
-        console.error(e);
+let userData = {};
+let miningList = [];
+
+async function loadData() {
+    const res = await fetch('data.json');
+    miningList = await res.json();
+    document.getElementById('display-box').innerText = "採掘準備完了！";
+}
+loadData();
+
+function lottery() {
+    const rand = Math.random() * 100;
+    let rank = 1, cum = 0;
+    for (const r in RANK_CHANCES) {
+        cum += RANK_CHANCES[r];
+        if (rand < cum) { rank = parseInt(r); break; }
     }
-}
-loadMiningData();
-
-// 2. リストからランダムに1つ選ぶ関数
-function getRandomItem() {
-    // リストの全種類から均等な確率で1つ選ぶ
-    const randomIndex = Math.floor(Math.random() * miningList.length);
-    return miningList[randomIndex];
+    const items = miningList.filter(i => i.rank === rank);
+    return items.length ? items[Math.floor(Math.random() * items.length)] : miningList[0];
 }
 
-// 3. Twitch接続
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
     socket.send('PASS SCHMOOPIE');
     socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`);
-    socket.send(`JOIN #${CHANNEL_NAME}`);
+    socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
 };
 
-socket.onmessage = (event) => {
-    const rawData = event.data;
-    if (rawData.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
+socket.onmessage = (e) => {
+    const d = e.data;
+    if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
+    if (d.includes('PRIVMSG')) {
+        const uid = d.match(/user-id=([^;]+)/)?.[1];
+        const name = d.match(/display-name=([^;]+)/)?.[1];
+        const msg = d.split('PRIVMSG')[1].split(' :')[1]?.trim();
 
-    if (rawData.includes('PRIVMSG')) {
-        const userId = rawData.match(/user-id=([^;]+)/)?.[1];
-        const displayName = rawData.match(/display-name=([^;]+)/)?.[1];
-        const msg = rawData.split('PRIVMSG')[1].split(' :')[1]?.trim();
-
-        if (msg === COMMAND && userId && miningList.length > 0) {
-            // ランダムに選出
-            const res = getRandomItem();
-
-            if (!userData[userId]) userData[userId] = { name: displayName, balance: 0 };
-            userData[userId].name = displayName;
-            userData[userId].balance += res.value;
+        if (msg === COMMAND && uid && miningList.length) {
+            const item = lottery();
+            if (!userData[uid]) userData[uid] = { balance: 0 };
+            userData[uid].name = name;
+            userData[uid].balance += item.value;
             
-            showOverlay(displayName, res.item, res.value, userData[userId].balance, res.class);
+            // 枠の色をレア度で変える
+            const box = document.getElementById('display-box');
+            box.style.borderColor = item.rank === 5 ? "gold" : (item.value < 0 ? "red" : "#6441a5");
+
+            showOverlay(name, item);
         }
     }
 };
 
-let hideTimeout;
-function showOverlay(name, item, value, total, css) {
+let tid;
+function showOverlay(name, item) {
     const box = document.getElementById('display-box');
-    const gainText = value > 0 ? `+${value.toLocaleString()} G` : "価値なし";
-
+    const valText = item.value < 0 ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
+    
     box.innerHTML = `
         <div class="user-name">${name}</div>
-        <div class="item-name ${css}">⛏️ ${item}</div>
-        <div class="value-gain">${gainText}</div>
-        <div class="total-score">現在の総資産: ${total.toLocaleString()} G</div>
+        <div class="item-name ${item.class}">${item.value < 0 ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
+        <div class="value-gain">${item.value === 0 ? "ゴミ..." : valText}</div>
+        <div class="total-score">総資産: ${userData[Object.keys(userData).find(k => userData[k].name === name)].balance.toLocaleString()} G</div>
     `;
     box.classList.remove('show');
     void box.offsetWidth;
     box.classList.add('show');
-    clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => box.classList.remove('show'), 7000);
+    clearTimeout(tid);
+    tid = setTimeout(() => box.classList.remove('show'), 7000);
 }
 </script>
 </body>

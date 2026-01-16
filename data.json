@@ -1,12 +1,29 @@
 [
-  { "item": "石ころ", "value": 0, "class": "stone" },
-  { "item": "鉄鉱石", "value": 100, "class": "" },
-  { "item": "銅鉱石", "value": 300, "class": "" },
-  { "item": "銀の塊", "value": 800, "class": "gold" },
-  { "item": "金塊", "value": 2500, "class": "gold" },
-  { "item": "ルビー", "value": 5000, "class": "diamond" },
-  { "item": "サファイア", "value": 5000, "class": "diamond" },
-  { "item": "エメラルド", "value": 7000, "class": "diamond" },
-  { "item": "ダイヤモンド", "value": 15000, "class": "diamond" },
-  { "item": "古代の硬貨", "value": 1200, "class": "gold" }
+  { "item": "湿った土", "value": 0, "rank": 1, "class": "stone" },
+  { "item": "ひび割れた石", "value": 5, "rank": 1, "class": "stone" },
+  { "item": "銅のつぶ", "value": 50, "rank": 1, "class": "" },
+  { "item": "鉄の原石", "value": 150, "rank": 1, "class": "" },
+  { "item": "異世界の石炭", "value": 300, "rank": 1, "class": "" },
+
+  { "item": "銀の欠片", "value": 800, "rank": 2, "class": "gold" },
+  { "item": "発光する苔", "value": 1200, "rank": 2, "class": "gold" },
+  { "item": "ミミスライム", "value": -600, "rank": 2, "class": "danger" },
+  { "item": "虚無の石", "value": 1, "rank": 2, "class": "stone" },
+  { "item": "魔力の結晶", "value": 2500, "rank": 2, "class": "gold" },
+
+  { "item": "ミスリル原石", "value": 6000, "rank": 3, "class": "gold" },
+  { "item": "炎の心石", "value": 8500, "rank": 3, "class": "gold" },
+  { "item": "呪われた金貨", "value": -7777, "rank": 3, "class": "danger" },
+  { "item": "星の砂", "value": 4500, "rank": 3, "class": "gold" },
+  { "item": "亡霊の遺灰", "value": -2000, "rank": 3, "class": "danger" },
+
+  { "item": "オリハルコン", "value": 25000, "rank": 4, "class": "diamond" },
+  { "item": "賢者の石の欠片", "value": 40000, "rank": 4, "class": "diamond" },
+  { "item": "魔王の涙", "value": -30000, "rank": 4, "class": "danger" },
+  { "item": "竜の鱗", "value": 55000, "rank": 4, "class": "diamond" },
+
+  { "item": "神代の宝冠", "value": 150000, "rank": 5, "class": "legend" },
+  { "item": "終焉を告げる石", "value": -500000, "rank": 5, "class": "abyss" },
+  { "item": "創世の雫", "value": 777777, "rank": 5, "class": "legend" },
+  { "item": "古龍の心臓", "value": 300000, "rank": 5, "class": "legend" }
 ]
