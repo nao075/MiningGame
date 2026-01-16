@@ -1,0 +1,12 @@
+[
+  { "item": "石ころ", "value": 0, "class": "stone" },
+  { "item": "鉄鉱石", "value": 100, "class": "" },
+  { "item": "銅鉱石", "value": 300, "class": "" },
+  { "item": "銀の塊", "value": 800, "class": "gold" },
+  { "item": "金塊", "value": 2500, "class": "gold" },
+  { "item": "ルビー", "value": 5000, "class": "diamond" },
+  { "item": "サファイア", "value": 5000, "class": "diamond" },
+  { "item": "エメラルド", "value": 7000, "class": "diamond" },
+  { "item": "ダイヤモンド", "value": 15000, "class": "diamond" },
+  { "item": "古代の硬貨", "value": 1200, "class": "gold" }
+]

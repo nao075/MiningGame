@@ -2,181 +2,119 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Mining Overlay</title>
+    <title>NAO075 Variety Mining</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
             color: white;
             text-shadow: 2px 2px 4px #000;
         }
         #overlay {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
         }
-        /* 枠の設定：サイズを固定してレイアウト崩れを防止 */
         .mining-box {
             background: rgba(0, 0, 0, 0.85);
-            padding: 25px;
-            border-radius: 20px;
-            border: 3px solid #6441a5; /* Twitchカラーのパープル */
-            text-align: center;
-            width: 450px;
-            box-sizing: border-box;
+            padding: 25px; border-radius: 20px; border: 3px solid #6441a5;
+            text-align: center; width: 450px; box-sizing: border-box;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            opacity: 0;
-            transform: scale(0.7);
+            opacity: 0; transform: scale(0.7);
         }
-        .mining-box.show {
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        /* 長い名前対策：枠を超えたら自動で「...」にする */
+        .mining-box.show { opacity: 1; transform: scale(1); }
         .user-name {
-            color: #bf94ff;
-            font-weight: bold;
-            font-size: 1.4em;
-            display: block;
-            width: 100%;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 10px;
+            color: #bf94ff; font-weight: bold; font-size: 1.4em;
+            display: block; width: 100%; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; margin-bottom: 10px;
         }
-
-        .item-name {
-            font-size: 1.8em;
-            margin: 10px 0;
-            display: block;
-            font-weight: bold;
-        }
-        .gold { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
-        .diamond { color: #00ffff; text-shadow: 0 0 15px rgba(0, 255, 255, 0.8); }
+        .item-name { font-size: 1.8em; margin: 10px 0; display: block; font-weight: bold; }
+        .gold { color: #ffd700; }
+        .diamond { color: #00ffff; text-shadow: 0 0 15px #00ffff; }
         .stone { color: #aaaaaa; }
-        
-        .value-gain {
-            font-size: 1.2em;
-            margin-bottom: 10px;
-        }
-
-        .total-score {
-            font-size: 0.9em;
-            color: #bbbbbb;
-            margin-top: 15px;
-            border-top: 1px solid #444;
-            padding-top: 10px;
-        }
+        .value-gain { font-size: 1.2em; margin-bottom: 10px; }
+        .total-score { font-size: 0.9em; color: #bbbbbb; margin-top: 15px; border-top: 1px solid #444; padding-top: 10px; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <div id="display-box" class="mining-box">
-        !採掘 とチャットしてね！
-    </div>
+    <div id="display-box" class="mining-box">データを読み込み中...</div>
 </div>
 
 <script>
-// --- 固定設定 ---
-const CHANNEL_NAME = 'nao075'; // チャンネル名を固定
+const CHANNEL_NAME = 'nao075';
 const COMMAND = '!採掘';
+let userData = {}; // リロードでリセット
+let miningList = []; // 外部リストを保持
 
-// --- データの読み込み (localStorage) ---
-const storageKey = `mining_data_${CHANNEL_NAME}`;
-let userData = JSON.parse(localStorage.getItem(storageKey)) || {};
+// 1. 外部JSONファイルの読み込み
+async function loadMiningData() {
+    try {
+        const response = await fetch('data.json');
+        miningList = await response.json();
+        document.getElementById('display-box').innerText = "!採掘 とチャットしてね！";
+    } catch (e) {
+        document.getElementById('display-box').innerText = "JSON読み込み失敗";
+        console.error(e);
+    }
+}
+loadMiningData();
 
-// Twitch WebSocketへの接続 (tmi.js不要)
+// 2. リストからランダムに1つ選ぶ関数
+function getRandomItem() {
+    // リストの全種類から均等な確率で1つ選ぶ
+    const randomIndex = Math.floor(Math.random() * miningList.length);
+    return miningList[randomIndex];
+}
+
+// 3. Twitch接続
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
-
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-    socket.send('PASS SCHMOOPIE'); // 読み取り専用はこれでOK
+    socket.send('PASS SCHMOOPIE');
     socket.send(`NICK justinfan${Math.floor(Math.random() * 10000)}`);
     socket.send(`JOIN #${CHANNEL_NAME}`);
-    console.log(`${CHANNEL_NAME} のチャット監視を開始しました`);
 };
 
 socket.onmessage = (event) => {
     const rawData = event.data;
-    
-    // PING-PONG（接続維持用）
-    if (rawData.startsWith('PING')) {
-        socket.send('PONG :tmi.twitch.tv');
-        return;
-    }
+    if (rawData.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
 
     if (rawData.includes('PRIVMSG')) {
         const userId = rawData.match(/user-id=([^;]+)/)?.[1];
         const displayName = rawData.match(/display-name=([^;]+)/)?.[1];
-        const messageParts = rawData.split('PRIVMSG')[1].split(' :');
-        const message = messageParts.slice(1).join(' :').trim();
+        const msg = rawData.split('PRIVMSG')[1].split(' :')[1]?.trim();
 
-        if (message === COMMAND && userId) {
-            handleMining(userId, displayName || "不明なユーザー");
+        if (msg === COMMAND && userId && miningList.length > 0) {
+            // ランダムに選出
+            const res = getRandomItem();
+
+            if (!userData[userId]) userData[userId] = { name: displayName, balance: 0 };
+            userData[userId].name = displayName;
+            userData[userId].balance += res.value;
+            
+            showOverlay(displayName, res.item, res.value, userData[userId].balance, res.class);
         }
     }
 };
 
-function handleMining(uid, name) {
-    const result = Math.random() * 100;
-    let item, value, colorClass;
-
-    // 抽選テーブル
-    if (result > 98) {
-        item = "伝説のダイヤ"; value = 10000; colorClass = "diamond";
-    } else if (result > 80) {
-        item = "金鉱石"; value = 1500; colorClass = "gold";
-    } else if (result > 40) {
-        item = "鉄くず"; value = 100; colorClass = "";
-    } else {
-        item = "石ころ"; value = 0; colorClass = "stone";
-    }
-
-    // データの更新 (IDで紐付け)
-    if (!userData[uid]) {
-        userData[uid] = { name: name, balance: 0 };
-    }
-    
-    // 最新の名前を保存し、値を加算
-    userData[uid].name = name;
-    userData[uid].balance += value;
-
-    // ローカルストレージに保存（リロード対策）
-    localStorage.setItem(storageKey, JSON.stringify(userData));
-
-    // 画面表示
-    updateDisplay(name, item, value, userData[uid].balance, colorClass);
-}
-
 let hideTimeout;
-function updateDisplay(name, item, value, total, colorClass) {
+function showOverlay(name, item, value, total, css) {
     const box = document.getElementById('display-box');
-    
-    // 獲得金額の表示テキスト
-    const gainText = value > 0 ? `+${value.toLocaleString()} G 獲得！` : "残念...";
+    const gainText = value > 0 ? `+${value.toLocaleString()} G` : "価値なし";
 
     box.innerHTML = `
         <div class="user-name">${name}</div>
-        <div class="item-name ${colorClass}">⛏️ ${item}</div>
+        <div class="item-name ${css}">⛏️ ${item}</div>
         <div class="value-gain">${gainText}</div>
         <div class="total-score">現在の総資産: ${total.toLocaleString()} G</div>
     `;
-
-    // アニメーション実行
     box.classList.remove('show');
-    void box.offsetWidth; // リフロー強制
+    void box.offsetWidth;
     box.classList.add('show');
-
-    // 7秒後に非表示にする（少し長めに設定）
     clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => {
-        box.classList.remove('show');
-    }, 7000);
+    hideTimeout = setTimeout(() => box.classList.remove('show'), 7000);
 }
 </script>
 </body>
