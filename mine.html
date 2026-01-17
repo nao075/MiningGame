@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>NAO075 Mining Overlay (Global Cooldown)</title>
+    <style>
+        /* CSS部分はご提示いただいたベースを維持 */
+        body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
+        #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .mining-box {
+            background: rgba(0, 0, 0, 0.95); padding: 15px 25px; border-radius: 15px; border: 4px solid #6441a5;
+            text-align: center; width: 500px; box-sizing: border-box;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; transform: scale(0.5); line-height: 1.1;
+        }
+        .mining-box.show { opacity: 1; transform: scale(1); }
+        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.5em; margin-bottom: 5px; }
+        .item-name { font-size: 2.6em; margin: 5px 0; font-weight: 900; letter-spacing: -1px; }
+        .gold { color: #ffd700; text-shadow: 0 0 10px #ffd700; }
+        .diamond { color: #00ffff; text-shadow: 0 0 20px #00ffff; }
+        .legend { animation: rainbow 2s linear infinite; font-weight: 900; }
+        @keyframes rainbow { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+        .danger { color: #ff4444; animation: shake 0.2s infinite; }
+        @keyframes shake { 0% { transform: translate(2px,2px); } 50% { transform: translate(-2px,-2px); } 100% { transform: translate(0,0); } }
+        .abyss { color: #ff00ff; text-shadow: 0 0 20px #ff00ff; animation: shake 0.1s infinite; }
+        .value-gain { font-size: 2em; font-weight: bold; margin-bottom: 10px; }
+        .minus { color: #ff3333; }
+        .total-score-container { background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.2) 100%); border-radius: 12px; padding: 12px; margin-top: 5px; border: 2px solid rgba(255, 255, 255, 0.4); }
+        .total-label { font-size: 1.1em; color: #eee; font-weight: bold; margin-bottom: 2px; }
+        .total-amount { font-size: 3.8em; font-weight: 900; color: #fff; display: block; letter-spacing: -2px; line-height: 1; }
+        .total-unit { font-size: 0.4em; margin-left: 5px; color: #ffd700; }
+    </style>
+</head>
+<body>
+    <div id="overlay"><div id="display-box" class="mining-box">採掘準備完了！(!mine / !m)</div></div>
+
+<script>
+// --- 設定項目 ---
+const CHANNEL_NAME = 'nao075';
+const COMMANDS = ['!mine', '!m']; 
+const COOLDOWN_MS = 60000; // 全体クールタイム（60秒）
+
+const OAUTH_TOKEN = 'oauth:r3yp7m2kbeg1ir755d5cqhbu1lafwx'; 
+const BOT_NAME = 'nao075_bot'; 
+
+// --- 内部変数 ---
+let globalLastMine = 0; // 全体で最後に採掘された時間
+let userData = {}; 
+let miningList = [];
+
+async function loadData() {
+    try {
+        const res = await fetch('data.json');
+        miningList = await res.json();
+    } catch(e) { console.error("JSON読み込み失敗", e); }
+}
+loadData();
+
+function lottery() {
+    const rand = Math.random() * 100;
+    let rank = 1, cum = 0;
+    const chances = { 1: 55, 2: 25, 3: 12, 4: 6, 5: 2 };
+    for (const r in chances) {
+        cum += chances[r];
+        if (rand < cum) { rank = parseInt(r); break; }
+    }
+    const items = miningList.filter(i => i.rank === rank);
+    return items.length ? items[Math.floor(Math.random() * items.length)] : miningList[0];
+}
+
+const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+
+socket.onopen = () => {
+    socket.send(`PASS ${OAUTH_TOKEN}`);
+    socket.send(`NICK ${BOT_NAME.toLowerCase()}`);
+    socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
+};
+
+socket.onmessage = (e) => {
+    const d = e.data;
+    if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
+    
+    if (d.includes('PRIVMSG')) {
+        const parts = d.split('PRIVMSG')[1].split(' :');
+        const msg = parts[1]?.toLowerCase().trim();
+        const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
+        const uid = d.match(/user-id=([^;]+)/)?.[1];
+
+        if (COMMANDS.includes(msg) && miningList.length) {
+            const now = Date.now();
+            const diff = now - globalLastMine;
+
+            // クールタイム判定（全体）
+            if (diff < COOLDOWN_MS) {
+                const timeLeft = Math.ceil((COOLDOWN_MS - diff) / 1000);
+                // Botがチャットで返信
+                socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、採掘場は現在クールダウン中です。あと ${timeLeft} 秒お待ちください。`);
+                return;
+            }
+
+            // 成功：全体クールタイムを更新
+            globalLastMine = now;
+
+            const item = lottery();
+            if (!userData[uid]) userData[uid] = { balance: 0 };
+            userData[uid].balance += item.value;
+            
+            showOverlay(name, item, userData[uid].balance);
+        }
+    }
+};
+
+let tid;
+function showOverlay(name, item, currentTotal) {
+    const box = document.getElementById('display-box');
+    const isLoss = item.value < 0;
+    const valText = isLoss ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
+    
+    let displayTotal = "";
+    const absTotal = Math.abs(currentTotal);
+    if (absTotal >= 100000000) displayTotal = (currentTotal / 100000000).toFixed(2) + " 億";
+    else if (absTotal >= 10000) displayTotal = (currentTotal / 10000).toFixed(1) + " 万";
+    else displayTotal = currentTotal.toLocaleString();
+
+    const totalStr = displayTotal.toString();
+    let fontSize = "3.8em"; 
+    if (totalStr.length > 8) fontSize = "2.8em";
+    if (totalStr.length > 11) fontSize = "2.2em";
+
+    box.innerHTML = `
+        <div class="user-name">${name}</div>
+        <div class="item-name ${item.class}">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
+        <div class="value-gain">${item.value === 0 ? "ハズレ" : valText}</div>
+        <div class="total-score-container">
+            <div class="total-label">現在の総資産</div>
+            <div class="total-amount" style="font-size: ${fontSize}; ${currentTotal < 0 ? 'color: #ff6666;' : ''}">
+                ${displayTotal}<span class="total-unit">G</span>
+            </div>
+        </div>`;
+
+    box.classList.remove('show');
+    void box.offsetWidth;
+    box.classList.add('show');
+    clearTimeout(tid);
+    tid = setTimeout(() => box.classList.remove('show'), 7000);
+}
+</script>
+</body>
+</html>
