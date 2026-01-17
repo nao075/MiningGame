@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Mining Overlay (Global Cooldown)</title>
+    <title>NAO075 Mining Overlay (5s Cooldown)</title>
     <style>
-        /* CSS部分はご提示いただいたベースを維持 */
+        /* デザイン部分はベースを維持 */
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
         #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         .mining-box {
@@ -31,19 +31,17 @@
     </style>
 </head>
 <body>
-    <div id="overlay"><div id="display-box" class="mining-box">採掘準備完了！(!mine / !m)</div></div>
+    <div id="overlay"><div id="display-box" class="mining-box">接続中...</div></div>
 
 <script>
-// --- 設定項目 ---
-const CHANNEL_NAME = 'nao075';
-const COMMANDS = ['!mine', '!m']; 
-const COOLDOWN_MS = 60000; // 全体クールタイム（60秒）
-
+// --- 設定項目 (ここを書き換えてください) ---
+const CHANNEL_NAME = 'nao075'; 
 const OAUTH_TOKEN = 'oauth:j1zwj1l4tib2ixg0g17i89vehfojjw'; 
 const BOT_NAME = 'nao075_bot'; 
+const COOLDOWN_MS  = 5000; // クールタイムを5秒に変更
 
 // --- 内部変数 ---
-let globalLastMine = 0; // 全体で最後に採掘された時間
+let globalLastMine = 0;
 let userData = {}; 
 let miningList = [];
 
@@ -51,7 +49,7 @@ async function loadData() {
     try {
         const res = await fetch('data.json');
         miningList = await res.json();
-    } catch(e) { console.error("JSON読み込み失敗", e); }
+    } catch(e) { console.error("JSON Error", e); }
 }
 loadData();
 
@@ -70,9 +68,12 @@ function lottery() {
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
 socket.onopen = () => {
+    // タグとコマンドの取得を要求（ボットの反応を安定させるために必須）
+    socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
     socket.send(`PASS ${OAUTH_TOKEN}`);
     socket.send(`NICK ${BOT_NAME.toLowerCase()}`);
     socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
+    console.log("Twitchへ接続信号を送信しました");
 };
 
 socket.onmessage = (e) => {
@@ -80,24 +81,24 @@ socket.onmessage = (e) => {
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
     
     if (d.includes('PRIVMSG')) {
-        const parts = d.split('PRIVMSG')[1].split(' :');
-        const msg = parts[1]?.toLowerCase().trim();
+        // メッセージとユーザー情報の解析
+        const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
         const uid = d.match(/user-id=([^;]+)/)?.[1];
 
-        if (COMMANDS.includes(msg) && miningList.length) {
+        if ((msg === '!mine' || msg === '!m') && miningList.length) {
             const now = Date.now();
             const diff = now - globalLastMine;
 
             // クールタイム判定（全体）
             if (diff < COOLDOWN_MS) {
                 const timeLeft = Math.ceil((COOLDOWN_MS - diff) / 1000);
-                // Botがチャットで返信
-                socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、採掘場は現在クールダウン中です。あと ${timeLeft} 秒お待ちください。`);
+                // ボットによる返信送信
+                socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、あと ${timeLeft} 秒お待ちください。`);
                 return;
             }
 
-            // 成功：全体クールタイムを更新
+            // 成功：クールタイム更新
             globalLastMine = now;
 
             const item = lottery();
