@@ -5,36 +5,14 @@
     <title>Mining Rank Endroll</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: 'Courier New', 'Meiryo', monospace; color: white; text-shadow: 2px 2px 4px #000; }
-        
-        #rank-container {
-            position: absolute; width: 100vw; height: 100vh;
-            display: none; /* 初期は非表示 */
-            justify-content: center;
-        }
-
-        .scroll-window {
-            position: relative; width: 800px; height: 100vh;
-            overflow: hidden; mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
-        }
-
-        .scroll-content {
-            position: absolute; width: 100%; top: 100%;
-            animation: scroll-up linear infinite;
-        }
-
-        @keyframes scroll-up {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-100%); }
-        }
-
-        .rank-line {
-            height: 50px; line-height: 50px; font-size: 24px; white-space: pre;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .rank-num { color: #ffd700; font-weight: bold; width: 60px; display: inline-block; text-align: right; margin-right: 15px; }
-        .user-name { color: #bf94ff; display: inline-block; width: 450px; }
-        .user-score { color: #00ffff; display: inline-block; text-align: right; }
+        #rank-container { position: absolute; width: 100vw; height: 100vh; display: none; justify-content: center; align-items: flex-end; }
+        .scroll-window { position: relative; width: 900px; height: 100vh; overflow: hidden; }
+        .scroll-content { position: absolute; width: 100%; top: 100%; animation: scroll-up linear infinite; }
+        @keyframes scroll-up { 0% { top: 100%; } 100% { top: -1300px; } } /* 25行分(1250px)をカバー */
+        .rank-line { height: 50px; line-height: 50px; font-size: 24px; white-space: pre; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; }
+        .rank-num { color: #ffd700; font-weight: bold; width: 80px; text-align: right; margin-right: 15px; flex-shrink: 0; }
+        .user-name { color: #bf94ff; width: 450px; flex-shrink: 0; overflow: hidden; }
+        .user-score { color: #00ffff; text-align: right; flex-grow: 1; }
     </style>
 </head>
 <body>
@@ -50,57 +28,49 @@ const CHANNEL_NAME = params.get('channel') || 'nao075';
 const BOT_NAME = params.get('bot') || '';
 const OAUTH_TOKEN = params.get('token') || '';
 
-let userData = {}; // 資産データ
-
-// 名前の長さを制限する関数
+// 文字数制限（20文字）
 function formatName(name) {
     if (name.length > 20) return name.substring(0, 19) + '…';
     return name.padEnd(20, ' ');
 }
 
-// 金額の単位変換（index.htmlと同じ仕様）
+// 金額フォーマット
 function formatScore(score) {
     const absTotal = Math.abs(score);
-    if (absTotal >= 100000000) return (score / 100000000).toFixed(2) + " 億 G";
-    if (absTotal >= 10000) return (score / 10000).toFixed(1) + " 万 G";
-    return score.toLocaleString() + " G";
+    let txt = "";
+    if (absTotal >= 100000000) txt = (score / 100000000).toFixed(2) + " 億 G";
+    else if (absTotal >= 10000) txt = (score / 10000).toFixed(1) + " 万 G";
+    else txt = score.toLocaleString() + " G";
+    return txt.padStart(15, ' ');
 }
 
-// ランキングHTMLの生成
 function updateRankDisplay() {
     const content = document.getElementById('scroll-content');
+    const userData = JSON.parse(localStorage.getItem('mining_userData')) || {};
     const sorted = Object.values(userData).sort((a, b) => b.balance - a.balance);
     
     let html = "";
-    // 1位から20位までのループ
+    // 1位から20位まで
     for (let i = 0; i < 20; i++) {
         if (i < sorted.length) {
             const user = sorted[i];
-            html += `
-                <div class="rank-line">
-                    <span class="rank-num">${i + 1}位 :</span>
-                    <span class="user-name">${formatName(user.name)}</span>
-                    <span class="user-score">${formatScore(user.balance)}</span>
-                </div>`;
+            html += `<div class="rank-line">
+                        <span class="rank-num">${i + 1}位 ：</span>
+                        <span class="user-name">${formatName(user.name)}</span>
+                        <span class="user-score">${formatScore(user.balance)}</span>
+                     </div>`;
         } else {
-            // 20人未満の場合は空行
-            html += `<div class="rank-line"></div>`;
+            html += `<div class="rank-line"></div>`; // 非表示改行
         }
     }
-
-    // 最後に5行の空行を追加
-    for (let j = 0; j < 5; j++) {
-        html += `<div class="rank-line"></div>`;
-    }
+    // 5行の余白
+    for (let j = 0; j < 5; j++) html += `<div class="rank-line"></div>`;
 
     content.innerHTML = html;
-    
-    // 行数に応じてアニメーション速度を調整（1行2秒計算）
-    const totalLines = 25;
-    content.style.animationDuration = (totalLines * 2.5) + "s";
+    // アニメーション速度調整（1行2.5秒 × 25行 = 62.5秒で1周）
+    content.style.animationDuration = "60s";
 }
 
-// Twitch 連携
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
@@ -112,37 +82,17 @@ socket.onopen = () => {
 socket.onmessage = (e) => {
     const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
-
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
-        const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
-        const uid = d.match(/user-id=([^;]+)/)?.[1];
-
-        // !end で表示開始
         if (msg === '!end') {
             updateRankDisplay();
             document.getElementById('rank-container').style.display = 'flex';
         }
-        // !notend で終了
         if (msg === '!notend') {
             document.getElementById('rank-container').style.display = 'none';
         }
-
-        // 採掘データの蓄積（!mineが実行された時に更新）
-        // ※ index.htmlと同じuserDataを共有するために、!mineメッセージも監視
-        if (msg === '!mine' || msg === '!m') {
-            // 実際の結果計算はindex.html側に任せ、
-            // ここでは簡易的に「誰が参加しているか」の枠組みを作ります。
-            // ※本来はデータベースが必要ですが、セッション内管理のため
-            // index.html側で更新されたuserDataを何らかの形で同期する必要があります。
-        }
     }
 };
-
-// 注意: index.htmlとデータの同期について
-// セッション（ブラウザ）が別だとuserDataが共有されません。
-// OBSで「同じブラウザソース」内でindex.htmlの後にこのスクリプトを読み込ませるか、
-// userDataを更新するメッセージを監視する仕組みが必要です。
 </script>
 </body>
 </html>
