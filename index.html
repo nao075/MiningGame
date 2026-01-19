@@ -2,105 +2,70 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mining Rank Endroll</title>
+    <title>NAO075 Mining Overlay (Animation Updated)</title>
     <style>
-        body { margin: 0; overflow: hidden; background: transparent; font-family: 'Courier New', 'Meiryo', monospace; color: white; text-shadow: 2px 2px 4px #000; }
-        
-        #rank-container {
-            position: absolute; width: 100vw; height: 100vh;
-            display: none; /* 初期は非表示 */
-            justify-content: center;
+        /* デザイン・スタイル設定（変更なし） */
+        body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
+        #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .mining-box {
+            background: rgba(0, 0, 0, 0.95); padding: 15px 25px; border-radius: 15px; border: 4px solid #6441a5;
+            text-align: center; width: 500px; box-sizing: border-box;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; transform: scale(0.5); line-height: 1.1;
         }
-
-        .scroll-window {
-            position: relative; width: 800px; height: 100vh;
-            overflow: hidden; mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
-        }
-
-        .scroll-content {
-            position: absolute; width: 100%; top: 100%;
-            animation: scroll-up linear infinite;
-        }
-
-        @keyframes scroll-up {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-100%); }
-        }
-
-        .rank-line {
-            height: 50px; line-height: 50px; font-size: 24px; white-space: pre;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .rank-num { color: #ffd700; font-weight: bold; width: 60px; display: inline-block; text-align: right; margin-right: 15px; }
-        .user-name { color: #bf94ff; display: inline-block; width: 450px; }
-        .user-score { color: #00ffff; display: inline-block; text-align: right; }
+        .mining-box.show { opacity: 1; transform: scale(1); }
+        .user-name { color: #bf94ff; font-weight: bold; font-size: 1.5em; margin-bottom: 5px; }
+        .item-name { font-size: 2.6em; margin: 5px 0; font-weight: 900; letter-spacing: -1px; }
+        .gold { color: #ffd700; text-shadow: 0 0 10px #ffd700; }
+        .diamond { color: #00ffff; text-shadow: 0 0 20px #00ffff; }
+        .legend { animation: rainbow 2s linear infinite; font-weight: 900; }
+        @keyframes rainbow { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+        .danger { color: #ff4444; animation: shake 0.2s infinite; }
+        @keyframes shake { 0% { transform: translate(2px,2px); } 50% { transform: translate(-2px,-2px); } 100% { transform: translate(0,0); } }
+        .abyss { color: #ff00ff; text-shadow: 0 0 20px #ff00ff; animation: shake 0.1s infinite; }
+        .value-gain { font-size: 2em; font-weight: bold; margin-bottom: 10px; }
+        .minus { color: #ff3333; }
+        .total-score-container { background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.2) 100%); border-radius: 12px; padding: 12px; margin-top: 5px; border: 2px solid rgba(255, 255, 255, 0.4); }
+        .total-label { font-size: 1.1em; color: #eee; font-weight: bold; margin-bottom: 2px; }
+        .total-amount { font-size: 3.8em; font-weight: 900; color: #fff; display: block; letter-spacing: -2px; line-height: 1; }
+        .total-unit { font-size: 0.4em; margin-left: 5px; color: #ffd700; }
+        .mining-dots { font-size: 2.5em; font-weight: bold; color: #ffd700; margin: 20px 0; min-height: 1.5em; }
     </style>
 </head>
 <body>
-    <div id="rank-container">
-        <div class="scroll-window">
-            <div id="scroll-content" class="scroll-content"></div>
-        </div>
-    </div>
+    <div id="overlay"><div id="display-box" class="mining-box">接続中...</div></div>
 
 <script>
+// --- URLパラメータから設定を取得 ---
 const params = new URLSearchParams(window.location.search);
-const CHANNEL_NAME = params.get('channel') || 'nao075';
-const BOT_NAME = params.get('bot') || '';
-const OAUTH_TOKEN = params.get('token') || '';
+const CHANNEL_NAME = params.get('channel') || 'nao075'; 
+const BOT_NAME     = params.get('bot') || ''; 
+const OAUTH_TOKEN  = params.get('token') || ''; 
+const COOLDOWN_MS  = 10000;
 
-let userData = {}; // 資産データ
+let globalLastMine = 0;
+let userData = {}; 
+let miningList = [];
 
-// 名前の長さを制限する関数
-function formatName(name) {
-    if (name.length > 20) return name.substring(0, 19) + '…';
-    return name.padEnd(20, ' ');
+async function loadData() {
+    try {
+        const res = await fetch('data.json');
+        miningList = await res.json();
+    } catch(e) { console.error("JSON Error", e); }
 }
+loadData();
 
-// 金額の単位変換（index.htmlと同じ仕様）
-function formatScore(score) {
-    const absTotal = Math.abs(score);
-    if (absTotal >= 100000000) return (score / 100000000).toFixed(2) + " 億 G";
-    if (absTotal >= 10000) return (score / 10000).toFixed(1) + " 万 G";
-    return score.toLocaleString() + " G";
-}
-
-// ランキングHTMLの生成
-function updateRankDisplay() {
-    const content = document.getElementById('scroll-content');
-    const sorted = Object.values(userData).sort((a, b) => b.balance - a.balance);
-    
-    let html = "";
-    // 1位から20位までのループ
-    for (let i = 0; i < 20; i++) {
-        if (i < sorted.length) {
-            const user = sorted[i];
-            html += `
-                <div class="rank-line">
-                    <span class="rank-num">${i + 1}位 :</span>
-                    <span class="user-name">${formatName(user.name)}</span>
-                    <span class="user-score">${formatScore(user.balance)}</span>
-                </div>`;
-        } else {
-            // 20人未満の場合は空行
-            html += `<div class="rank-line"></div>`;
-        }
+function lottery() {
+    const rand = Math.random() * 100;
+    let rank = 1, cum = 0;
+    const chances = { 1: 55, 2: 25, 3: 12, 4: 6, 5: 2 };
+    for (const r in chances) {
+        cum += chances[r];
+        if (rand < cum) { rank = parseInt(r); break; }
     }
-
-    // 最後に5行の空行を追加
-    for (let j = 0; j < 5; j++) {
-        html += `<div class="rank-line"></div>`;
-    }
-
-    content.innerHTML = html;
-    
-    // 行数に応じてアニメーション速度を調整（1行2秒計算）
-    const totalLines = 25;
-    content.style.animationDuration = (totalLines * 2.5) + "s";
+    const items = miningList.filter(i => i.rank === rank);
+    return items.length ? items[Math.floor(Math.random() * items.length)] : miningList[0];
 }
 
-// Twitch 連携
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 socket.onopen = () => {
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
@@ -112,37 +77,81 @@ socket.onopen = () => {
 socket.onmessage = (e) => {
     const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
-
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
         const uid = d.match(/user-id=([^;]+)/)?.[1];
 
-        // !end で表示開始
-        if (msg === '!end') {
-            updateRankDisplay();
-            document.getElementById('rank-container').style.display = 'flex';
-        }
-        // !notend で終了
-        if (msg === '!notend') {
-            document.getElementById('rank-container').style.display = 'none';
-        }
-
-        // 採掘データの蓄積（!mineが実行された時に更新）
-        // ※ index.htmlと同じuserDataを共有するために、!mineメッセージも監視
-        if (msg === '!mine' || msg === '!m') {
-            // 実際の結果計算はindex.html側に任せ、
-            // ここでは簡易的に「誰が参加しているか」の枠組みを作ります。
-            // ※本来はデータベースが必要ですが、セッション内管理のため
-            // index.html側で更新されたuserDataを何らかの形で同期する必要があります。
+        if ((msg === '!mine' || msg === '!m') && miningList.length) {
+            const now = Date.now();
+            if (now - globalLastMine < COOLDOWN_MS) {
+                const timeLeft = Math.ceil((COOLDOWN_MS - (now - globalLastMine)) / 1000);
+                socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、あと ${timeLeft} 秒お待ちください。`);
+                return;
+            }
+            globalLastMine = now;
+            startMiningProcess(name, uid);
         }
     }
 };
 
-// 注意: index.htmlとデータの同期について
-// セッション（ブラウザ）が別だとuserDataが共有されません。
-// OBSで「同じブラウザソース」内でindex.htmlの後にこのスクリプトを読み込ませるか、
-// userDataを更新するメッセージを監視する仕組みが必要です。
+function startMiningProcess(name, uid) {
+    const box = document.getElementById('display-box');
+    box.classList.remove('show');
+    
+    setTimeout(() => {
+        // 0秒目：・採掘中
+        box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・採掘中</div>`;
+        box.classList.add('show');
+        
+        // 1秒目：・・採掘中
+        setTimeout(() => {
+            box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・採掘中</div>`;
+        }, 1000);
+
+        // 2秒目：・・・採掘中
+        setTimeout(() => {
+            box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・・採掘中</div>`;
+        }, 2000);
+
+        // 3秒目：結果発表（4秒間）
+        setTimeout(() => {
+            const item = lottery();
+            if (!userData[uid]) userData[uid] = { balance: 0 };
+            userData[uid].balance += item.value;
+            showResult(name, item, userData[uid].balance);
+
+            // 7秒目：枠を消す
+            setTimeout(() => {
+                box.classList.remove('show');
+            }, 4000);
+        }, 3000);
+        
+    }, 100);
+}
+
+function showResult(name, item, currentTotal) {
+    const box = document.getElementById('display-box');
+    const isLoss = item.value < 0;
+    const valText = isLoss ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
+    
+    let displayTotal = "";
+    const absTotal = Math.abs(currentTotal);
+    if (absTotal >= 100000000) displayTotal = (currentTotal / 100000000).toFixed(2) + " 億";
+    else if (absTotal >= 10000) displayTotal = (currentTotal / 10000).toFixed(1) + " 万";
+    else displayTotal = currentTotal.toLocaleString();
+
+    box.innerHTML = `
+        <div class="user-name">${name}</div>
+        <div class="item-name ${item.class}">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
+        <div class="value-gain">${item.value === 0 ? "ハズレ" : valText}</div>
+        <div class="total-score-container">
+            <div class="total-label">現在の総資産</div>
+            <div class="total-amount" style="${currentTotal < 0 ? 'color: #ff6666;' : ''}">
+                ${displayTotal}<span class="total-unit">G</span>
+            </div>
+        </div>`;
+}
 </script>
 </body>
 </html>
