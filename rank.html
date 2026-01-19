@@ -2,13 +2,36 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mining Rank Endroll</title>
+    <title>Mining Rank (Top 10)</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: 'Courier New', 'Meiryo', monospace; color: white; text-shadow: 2px 2px 4px #000; }
-        #rank-container { position: absolute; width: 100vw; height: 100vh; display: flex; /* 最初からflexにしておく */justify-content: center; align-items: flex-end;opacity: 0; /* 透明にして隠しておく */pointer-events: none; /* クリックを無効化 */}
+        
+        #rank-container { 
+            position: absolute; 
+            width: 100vw; 
+            height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-end;
+            opacity: 0; /* 最初は透明 */
+            transition: opacity 0.5s;
+        }
+
         .scroll-window { position: relative; width: 900px; height: 100vh; overflow: hidden; }
-        .scroll-content { position: absolute; width: 100%; top: 100%; animation: scroll-up linear infinite; }
-        @keyframes scroll-up { 0% { top: 100%; } 100% { top: -1300px; } } /* 25行分(1250px)をカバー */
+        
+        /* アニメーション速度を10位＋余白に合わせて調整 */
+        .scroll-content { 
+            position: absolute; 
+            width: 100%; 
+            top: 100%; 
+            animation: scroll-up 30s linear infinite; 
+        }
+
+        @keyframes scroll-up { 
+            0% { top: 100%; } 
+            100% { top: -800px; } /* 15行分をカバー */
+        }
+
         .rank-line { height: 50px; line-height: 50px; font-size: 24px; white-space: pre; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; }
         .rank-num { color: #ffd700; font-weight: bold; width: 80px; text-align: right; margin-right: 15px; flex-shrink: 0; }
         .user-name { color: #bf94ff; width: 450px; flex-shrink: 0; overflow: hidden; }
@@ -28,13 +51,11 @@ const CHANNEL_NAME = params.get('channel') || 'nao075';
 const BOT_NAME = params.get('bot') || '';
 const OAUTH_TOKEN = params.get('token') || '';
 
-// 文字数制限（20文字）
 function formatName(name) {
     if (name.length > 20) return name.substring(0, 19) + '…';
     return name.padEnd(20, ' ');
 }
 
-// 金額フォーマット
 function formatScore(score) {
     const absTotal = Math.abs(score);
     let txt = "";
@@ -50,8 +71,8 @@ function updateRankDisplay() {
     const sorted = Object.values(userData).sort((a, b) => b.balance - a.balance);
     
     let html = "";
-    // 1位から20位まで
-    for (let i = 0; i < 20; i++) {
+    // 10位までに変更
+    for (let i = 0; i < 10; i++) {
         if (i < sorted.length) {
             const user = sorted[i];
             html += `<div class="rank-line">
@@ -60,15 +81,12 @@ function updateRankDisplay() {
                         <span class="user-score">${formatScore(user.balance)}</span>
                      </div>`;
         } else {
-            html += `<div class="rank-line"></div>`; // 非表示改行
+            html += `<div class="rank-line"></div>`; 
         }
     }
-    // 5行の余白
+    // 余白を5行
     for (let j = 0; j < 5; j++) html += `<div class="rank-line"></div>`;
-
     content.innerHTML = html;
-    // アニメーション速度調整（1行2.5秒 × 25行 = 62.5秒で1周）
-    content.style.animationDuration = "60s";
 }
 
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
@@ -84,13 +102,13 @@ socket.onmessage = (e) => {
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
-        /* JavaScript側の!end時の処理も変更 */
+        
         if (msg === '!end') {
             updateRankDisplay();
-            document.getElementById('rank-container').style.opacity = '1'; // 不透明にする
+            document.getElementById('rank-container').style.opacity = '1';
         }
         if (msg === '!notend') {
-            document.getElementById('rank-container').style.opacity = '0'; // 透明にする
+            document.getElementById('rank-container').style.opacity = '0';
         }
     }
 };
