@@ -74,6 +74,16 @@ socket.onopen = () => {
 };
 
 socket.onmessage = (e) => {
+    // index.html のメッセージ判定部分に追記
+    const badges = d.match(/badges=([^;]+)/)?.[1] || "";
+    const isStreamer = badges.includes("broadcaster");
+
+    if (isStreamer && msg === '!resetall') {
+        userData = {}; // メモリ上のデータを空にする
+        localStorage.removeItem('mining_userData'); // 保存データを削除
+        socket.send(`PRIVMSG #${CHANNEL_NAME} :全ての採掘データをリセットしました。`);
+    }
+
     const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
     if (d.includes('PRIVMSG')) {
