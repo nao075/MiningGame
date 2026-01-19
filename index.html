@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Mining Overlay (Precision Timer)</title>
+    <title>NAO075 Mining Overlay (Fixed Timer)</title>
     <style>
-        /* デザイン・アニメーション設定（ベース維持） */
+        /* デザイン・スタイル設定（維持） */
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
         #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         .mining-box {
@@ -35,19 +35,12 @@
     <div id="overlay"><div id="display-box" class="mining-box">接続中...</div></div>
 
 <script>
-// --- 設定項目 ---
 // --- URLパラメータから設定を取得 ---
 const params = new URLSearchParams(window.location.search);
 const CHANNEL_NAME = params.get('channel') || 'nao075'; 
 const BOT_NAME     = params.get('bot') || ''; 
 const OAUTH_TOKEN  = params.get('token') || ''; 
-const COOLDOWN_MS  = 10000;
-
-// トークン未設定時の警告（デバッグ用）
-if (!OAUTH_TOKEN) {
-    console.error("URLパラメータにtokenが設定されていません。guide.htmlでURLを作成してください。");
-}
-
+const COOLDOWN_MS  = 10000; // 10秒
 
 let globalLastMine = 0;
 let userData = {}; 
@@ -102,37 +95,40 @@ socket.onmessage = (e) => {
     }
 };
 
-// 進行管理：採掘(3s) -> 結果(4s) -> 消去
 function startMiningProcess(name, uid) {
     const box = document.getElementById('display-box');
-    box.classList.add('show');
     
-    // 1. 採掘中アニメーション (合計3秒)
-    let step = 0;
-    const dots = ["・", "・・", "・・・採掘中"];
+    // 前回の結果をクリアして非表示にし、一瞬待ってから出し直す（アニメーションリセット）
+    box.classList.remove('show');
     
-    const miningInterval = setInterval(() => {
-        box.innerHTML = `
-            <div class="user-name">${name}</div>
-            <div class="mining-dots">${dots[step]}</div>
-        `;
-        step++;
-        if (step >= dots.length) clearInterval(miningInterval);
-    }, 1000);
-
-    // 2. 結果表示 (3秒後に開始)
     setTimeout(() => {
-        const item = lottery();
-        if (!userData[uid]) userData[uid] = { balance: 0 };
-        userData[uid].balance += item.value;
-        showResult(name, item, userData[uid].balance);
-
-        // 3. 枠を消す (結果表示から4秒後に実行 = 通算7秒目)
+        box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・</div>`;
+        box.classList.add('show');
+        
+        // 1秒目：・・
         setTimeout(() => {
-            box.classList.remove('show');
-        }, 4000);
+            box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・</div>`;
+        }, 1000);
 
-    }, 3000);
+        // 2秒目：・・・採掘中
+        setTimeout(() => {
+            box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・・採掘中</div>`;
+        }, 2000);
+
+        // 3秒目：結果発表
+        setTimeout(() => {
+            const item = lottery();
+            if (!userData[uid]) userData[uid] = { balance: 0 };
+            userData[uid].balance += item.value;
+            showResult(name, item, userData[uid].balance);
+
+            // 7秒目：枠を消す (結果発表から4秒後)
+            setTimeout(() => {
+                box.classList.remove('show');
+            }, 4000);
+        }, 3000);
+        
+    }, 100);
 }
 
 function showResult(name, item, currentTotal) {
