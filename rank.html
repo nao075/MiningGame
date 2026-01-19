@@ -5,7 +5,7 @@
     <title>Mining Rank Endroll</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: 'Courier New', 'Meiryo', monospace; color: white; text-shadow: 2px 2px 4px #000; }
-        #rank-container { position: absolute; width: 100vw; height: 100vh; display: none; justify-content: center; align-items: flex-end; }
+        #rank-container { position: absolute; width: 100vw; height: 100vh; display: flex; /* 最初からflexにしておく */justify-content: center; align-items: flex-end;opacity: 0; /* 透明にして隠しておく */pointer-events: none; /* クリックを無効化 */}
         .scroll-window { position: relative; width: 900px; height: 100vh; overflow: hidden; }
         .scroll-content { position: absolute; width: 100%; top: 100%; animation: scroll-up linear infinite; }
         @keyframes scroll-up { 0% { top: 100%; } 100% { top: -1300px; } } /* 25行分(1250px)をカバー */
@@ -84,12 +84,13 @@ socket.onmessage = (e) => {
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
+        /* JavaScript側の!end時の処理も変更 */
         if (msg === '!end') {
             updateRankDisplay();
-            document.getElementById('rank-container').style.display = 'flex';
+            document.getElementById('rank-container').style.opacity = '1'; // 不透明にする
         }
         if (msg === '!notend') {
-            document.getElementById('rank-container').style.display = 'none';
+            document.getElementById('rank-container').style.opacity = '0'; // 透明にする
         }
     }
 };
