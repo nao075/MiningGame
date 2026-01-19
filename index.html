@@ -41,7 +41,6 @@ const OAUTH_TOKEN  = params.get('token') || '';
 const COOLDOWN_MS  = 10000;
 
 let globalLastMine = 0;
-// 保存されたデータを読み込み
 let userData = JSON.parse(localStorage.getItem('mining_userData')) || {}; 
 let miningList = [];
 
@@ -74,23 +73,25 @@ socket.onopen = () => {
 };
 
 socket.onmessage = (e) => {
-    // index.html のメッセージ判定部分に追記
-    const badges = d.match(/badges=([^;]+)/)?.[1] || "";
-    const isStreamer = badges.includes("broadcaster");
-
-    if (isStreamer && msg === '!resetall') {
-        userData = {}; // メモリ上のデータを空にする
-        localStorage.removeItem('mining_userData'); // 保存データを削除
-        socket.send(`PRIVMSG #${CHANNEL_NAME} :全ての採掘データをリセットしました。`);
-    }
-
-    const d = e.data;
+    const d = e.data; // ★まず最初に受信データを定義
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
+
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
         const uid = d.match(/user-id=([^;]+)/)?.[1];
+        const badges = d.match(/badges=([^;]+)/)?.[1] || "";
+        const isStreamer = badges.includes("broadcaster");
 
+        // ★リセットコマンド（ストリーマー限定）
+        if (isStreamer && msg === '!resetall') {
+            userData = {};
+            localStorage.removeItem('mining_userData');
+            socket.send(`PRIVMSG #${CHANNEL_NAME} :全ての採掘データをリセットしました。`);
+            return;
+        }
+
+        // ★採掘コマンド
         if ((msg === '!mine' || msg === '!m') && miningList.length) {
             const now = Date.now();
             if (now - globalLastMine < COOLDOWN_MS) {
@@ -119,9 +120,8 @@ function startMiningProcess(name, uid) {
             const item = lottery();
             if (!userData[uid]) userData[uid] = { name: name, balance: 0 };
             userData[uid].balance += item.value;
-            userData[uid].name = name; // 表示名を更新
+            userData[uid].name = name; 
             
-            // データの保存
             localStorage.setItem('mining_userData', JSON.stringify(userData));
             
             showResult(name, item, userData[uid].balance);
