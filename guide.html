@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Mining Overlay URL Generator</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f2f5; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #6441a5; font-size: 1.5em; border-bottom: 2px solid #6441a5; padding-bottom: 10px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1em; }
+        .hint { font-size: 0.85em; color: #666; margin-top: 5px; }
+        .result-box { background: #eef; padding: 15px; border-radius: 8px; border: 1px solid #ccd; margin-top: 25px; }
+        .url-display { word-break: break-all; font-family: monospace; background: #fff; padding: 10px; border: 1px dashed #6441a5; margin-top: 10px; display: block; }
+        button { background: #6441a5; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 1em; width: 100%; transition: 0.3s; }
+        button:hover { background: #4b3081; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OBS用URLジェネレーター</h1>
+        <p>以下の情報を入力して、OBSのブラウザソースに貼り付けるURLを作成します。</p>
+
+        <div class="input-group">
+            <label>配信チャンネル名 (ID)</label>
+            <input type="text" id="channel" value="nao075" placeholder="例: nao075">
+        </div>
+
+        <div class="input-group">
+            <label>Botのアカウント名 (ID)</label>
+            <input type="text" id="bot" placeholder="例: my_mining_bot">
+            <div class="hint">英数字のIDを入力してください。</div>
+        </div>
+
+        <div class="input-group">
+            <label>OAuthトークン</label>
+            <input type="password" id="token" placeholder="oauth:xxxxxxxxxxxx">
+            <div class="hint"><a href="https://twitchapps.com/tmi/" target="_blank">ここで取得</a>したトークンを oauth: から入力。</div>
+        </div>
+
+        <button onclick="generateURL()">URLを生成する</button>
+
+        <div id="result" class="result-box" style="display:none;">
+            <label>OBSの「URL」欄に以下を貼り付けてください：</label>
+            <code class="url-display" id="generated-url"></code>
+            <p class="hint" style="color:#d33;">※このURLにはパスワードが含まれています。絶対に配信画面に映さないでください！</p>
+        </div>
+    </div>
+
+    <script>
+        function generateURL() {
+            const channel = document.getElementById('channel').value.trim();
+            const bot = document.getElementById('bot').value.trim();
+            const token = document.getElementById('token').value.trim();
+            
+            if(!channel || !bot || !token) {
+                alert("すべての項目を入力してください。");
+                return;
+            }
+
+            // 現在のindex.htmlの場所を取得
+            const currentPath = window.location.href.replace('guide.html', 'index.html');
+            
+            // パラメータを付与
+            const finalURL = `${currentPath}?channel=${encodeURIComponent(channel)}&bot=${encodeURIComponent(bot)}&token=${encodeURIComponent(token)}`;
+            
+            document.getElementById('generated-url').innerText = finalURL;
+            document.getElementById('result').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
