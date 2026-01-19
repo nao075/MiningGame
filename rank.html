@@ -100,15 +100,22 @@ socket.onopen = () => {
 socket.onmessage = (e) => {
     const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
+    
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         
-        if (msg === '!end') {
-            updateRankDisplay();
-            document.getElementById('rank-container').style.opacity = '1';
-        }
-        if (msg === '!notend') {
-            document.getElementById('rank-container').style.opacity = '0';
+        // バッジ情報を取得して、ストリーマー(broadcaster)かどうかを判定
+        const badges = d.match(/badges=([^;]+)/)?.[1] || "";
+        const isStreamer = badges.includes("broadcaster");
+
+        // ストリーマーのみ実行可能
+        if (isStreamer) {
+            if (msg === '!end') {
+                updateRankDisplay();
+                document.getElementById('rank-container').style.opacity = '1';
+            } else if (msg === '!notend') {
+                document.getElementById('rank-container').style.opacity = '0';
+            }
         }
     }
 };
