@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NAO075 Mining Overlay (5s Cooldown)</title>
+    <title>NAO075 Mining Overlay (Precision Timer)</title>
     <style>
-        /* デザイン部分はベースを維持 */
+        /* デザイン・アニメーション設定（ベース維持） */
         body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; color: white; text-shadow: 2px 2px 4px #000; }
         #overlay { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         .mining-box {
@@ -28,19 +28,19 @@
         .total-label { font-size: 1.1em; color: #eee; font-weight: bold; margin-bottom: 2px; }
         .total-amount { font-size: 3.8em; font-weight: 900; color: #fff; display: block; letter-spacing: -2px; line-height: 1; }
         .total-unit { font-size: 0.4em; margin-left: 5px; color: #ffd700; }
+        .mining-dots { font-size: 2.5em; font-weight: bold; color: #ffd700; margin: 20px 0; min-height: 1.5em; }
     </style>
 </head>
 <body>
     <div id="overlay"><div id="display-box" class="mining-box">接続中...</div></div>
 
 <script>
-// --- 設定項目 (ここを書き換えてください) ---
+// --- 設定項目 ---
 const CHANNEL_NAME = 'nao075'; 
-const OAUTH_TOKEN = 'oauth:j1zwj1l4tib2ixg0g17i89vehfojjw'; 
-const BOT_NAME = 'nao075_bot'; 
-const COOLDOWN_MS  = 5000; // クールタイムを5秒に変更
+const BOT_NAME     = 'ボットのアカウントID'; 
+const OAUTH_TOKEN  = 'oauth:xxxxxxxxxxxxxxxx'; 
+const COOLDOWN_MS  = 10000; // 全体10秒
 
-// --- 内部変数 ---
 let globalLastMine = 0;
 let userData = {}; 
 let miningList = [];
@@ -66,52 +66,68 @@ function lottery() {
 }
 
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
-
 socket.onopen = () => {
-    // タグとコマンドの取得を要求（ボットの反応を安定させるために必須）
     socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
     socket.send(`PASS ${OAUTH_TOKEN}`);
     socket.send(`NICK ${BOT_NAME.toLowerCase()}`);
     socket.send(`JOIN #${CHANNEL_NAME.toLowerCase()}`);
-    console.log("Twitchへ接続信号を送信しました");
 };
 
 socket.onmessage = (e) => {
     const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
-    
     if (d.includes('PRIVMSG')) {
-        // メッセージとユーザー情報の解析
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
         const uid = d.match(/user-id=([^;]+)/)?.[1];
 
         if ((msg === '!mine' || msg === '!m') && miningList.length) {
             const now = Date.now();
-            const diff = now - globalLastMine;
-
-            // クールタイム判定（全体）
-            if (diff < COOLDOWN_MS) {
-                const timeLeft = Math.ceil((COOLDOWN_MS - diff) / 1000);
-                // ボットによる返信送信
+            if (now - globalLastMine < COOLDOWN_MS) {
+                const timeLeft = Math.ceil((COOLDOWN_MS - (now - globalLastMine)) / 1000);
                 socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、あと ${timeLeft} 秒お待ちください。`);
                 return;
             }
-
-            // 成功：クールタイム更新
             globalLastMine = now;
-
-            const item = lottery();
-            if (!userData[uid]) userData[uid] = { balance: 0 };
-            userData[uid].balance += item.value;
-            
-            showOverlay(name, item, userData[uid].balance);
+            startMiningProcess(name, uid);
         }
     }
 };
 
-let tid;
-function showOverlay(name, item, currentTotal) {
+// 進行管理：採掘(3s) -> 結果(4s) -> 消去
+function startMiningProcess(name, uid) {
+    const box = document.getElementById('display-box');
+    box.classList.add('show');
+    
+    // 1. 採掘中アニメーション (合計3秒)
+    let step = 0;
+    const dots = ["・", "・・", "・・・採掘中"];
+    
+    const miningInterval = setInterval(() => {
+        box.innerHTML = `
+            <div class="user-name">${name}</div>
+            <div class="mining-dots">${dots[step]}</div>
+        `;
+        step++;
+        if (step >= dots.length) clearInterval(miningInterval);
+    }, 1000);
+
+    // 2. 結果表示 (3秒後に開始)
+    setTimeout(() => {
+        const item = lottery();
+        if (!userData[uid]) userData[uid] = { balance: 0 };
+        userData[uid].balance += item.value;
+        showResult(name, item, userData[uid].balance);
+
+        // 3. 枠を消す (結果表示から4秒後に実行 = 通算7秒目)
+        setTimeout(() => {
+            box.classList.remove('show');
+        }, 4000);
+
+    }, 3000);
+}
+
+function showResult(name, item, currentTotal) {
     const box = document.getElementById('display-box');
     const isLoss = item.value < 0;
     const valText = isLoss ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
@@ -122,27 +138,16 @@ function showOverlay(name, item, currentTotal) {
     else if (absTotal >= 10000) displayTotal = (currentTotal / 10000).toFixed(1) + " 万";
     else displayTotal = currentTotal.toLocaleString();
 
-    const totalStr = displayTotal.toString();
-    let fontSize = "3.8em"; 
-    if (totalStr.length > 8) fontSize = "2.8em";
-    if (totalStr.length > 11) fontSize = "2.2em";
-
     box.innerHTML = `
         <div class="user-name">${name}</div>
         <div class="item-name ${item.class}">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
         <div class="value-gain">${item.value === 0 ? "ハズレ" : valText}</div>
         <div class="total-score-container">
             <div class="total-label">現在の総資産</div>
-            <div class="total-amount" style="font-size: ${fontSize}; ${currentTotal < 0 ? 'color: #ff6666;' : ''}">
+            <div class="total-amount" style="${currentTotal < 0 ? 'color: #ff6666;' : ''}">
                 ${displayTotal}<span class="total-unit">G</span>
             </div>
         </div>`;
-
-    box.classList.remove('show');
-    void box.offsetWidth;
-    box.classList.add('show');
-    clearTimeout(tid);
-    tid = setTimeout(() => box.classList.remove('show'), 7000);
 }
 </script>
 </body>
