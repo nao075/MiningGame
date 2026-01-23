@@ -38,7 +38,8 @@ const params = new URLSearchParams(window.location.search);
 const CHANNEL_NAME = params.get('channel') || 'nao075'; 
 const BOT_NAME     = params.get('bot') || ''; 
 const OAUTH_TOKEN  = params.get('token') || ''; 
-const COOLDOWN_MS  = 10000;
+const COOLDOWN_MS  = 10000; // クールタイム 10秒
+const MAX_MINE     = 10;    // 1日の採掘上限
 
 let globalLastMine = 0;
 let userData = JSON.parse(localStorage.getItem('mining_userData')) || {}; 
@@ -73,33 +74,60 @@ socket.onopen = () => {
 };
 
 socket.onmessage = (e) => {
-    const d = e.data; // ★まず最初に受信データを定義
+    const d = e.data;
     if (d.startsWith('PING')) { socket.send('PONG :tmi.twitch.tv'); return; }
 
     if (d.includes('PRIVMSG')) {
         const msg = d.split('PRIVMSG')[1].split(' :')[1]?.toLowerCase().trim();
         const name = d.match(/display-name=([^;]+)/)?.[1] || d.split('!')[0].substring(1);
         const uid = d.match(/user-id=([^;]+)/)?.[1];
-        const badges = d.match(/badges=([^;]+)/)?.[1] || "";
-        const isStreamer = badges.includes("broadcaster");
+        const tags = d.match(/badges=([^;]+)/)?.[1] || "";
+        const isStreamer = tags.includes("broadcaster");
 
-        // ★リセットコマンド（ストリーマー限定）
+        // ★全データリセットコマンド（ストリーマー限定）
         if (isStreamer && msg === '!resetall') {
             userData = {};
             localStorage.removeItem('mining_userData');
-            socket.send(`PRIVMSG #${CHANNEL_NAME} :全ての採掘データをリセットしました。`);
+            socket.send(`PRIVMSG #${CHANNEL_NAME} :全ての採掘データ（所持金・回数）をリセットしました。`);
             return;
         }
 
-        // ★採掘コマンド
+        // ★採掘コマンド (!mine または !m)
         if ((msg === '!mine' || msg === '!m') && miningList.length) {
             const now = Date.now();
+
+            // ユーザーデータの初期化（回数 count を追加）
+            if (!userData[uid]) {
+                userData[uid] = { name: name, balance: 0, count: 0, lastReset: now };
+            }
+
+            // 日付が変わったら回数を自動リセット（24時間経過判定）
+            const oneDay = 24 * 60 * 60 * 1000;
+            if (now - (userData[uid].lastReset || 0) > oneDay) {
+                userData[uid].count = 0;
+                userData[uid].lastReset = now;
+            }
+
+            // 回数制限チェック
+            if (userData[uid].count >= MAX_MINE) {
+                socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、本日の採掘限界（${MAX_MINE}回）に達しました。また明日お越しください！`);
+                return;
+            }
+
+            // 全体クールタイムチェック
             if (now - globalLastMine < COOLDOWN_MS) {
                 const timeLeft = Math.ceil((COOLDOWN_MS - (now - globalLastMine)) / 1000);
                 socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、あと ${timeLeft} 秒お待ちください。`);
                 return;
             }
+
+            // 採掘成功時の処理
             globalLastMine = now;
+            userData[uid].count++; // 回数加算
+            
+            // Botによる回数通知
+            socket.send(`PRIVMSG #${CHANNEL_NAME} :${name} さん ${userData[uid].count} 回目の採掘です（${userData[uid].count}/${MAX_MINE}）`);
+            
             startMiningProcess(name, uid);
         }
     }
@@ -110,15 +138,15 @@ function startMiningProcess(name, uid) {
     box.classList.remove('show');
     
     setTimeout(() => {
-        box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・採掘中</div>`;
+        box.innerHTML = `<div class=\"user-name\">${name}</div><div class=\"mining-dots\">・採掘中</div>`;
         box.classList.add('show');
         
-        setTimeout(() => { box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・採掘中</div>`; }, 1000);
-        setTimeout(() => { box.innerHTML = `<div class="user-name">${name}</div><div class="mining-dots">・・・採掘中</div>`; }, 2000);
+        setTimeout(() => { box.innerHTML = `<div class=\"user-name\">${name}</div><div class=\"mining-dots\">・・採掘中</div>`; }, 1000);
+        setTimeout(() => { box.innerHTML = `<div class=\"user-name\">${name}</div><div class=\"mining-dots\">・・・採掘中</div>`; }, 2000);
 
         setTimeout(() => {
             const item = lottery();
-            if (!userData[uid]) userData[uid] = { name: name, balance: 0 };
+            // データの加算と保存
             userData[uid].balance += item.value;
             userData[uid].name = name; 
             
@@ -126,6 +154,7 @@ function startMiningProcess(name, uid) {
             
             showResult(name, item, userData[uid].balance);
 
+            // 4秒後に表示を消す
             setTimeout(() => { box.classList.remove('show'); }, 4000);
         }, 3000);
     }, 100);
@@ -134,22 +163,22 @@ function startMiningProcess(name, uid) {
 function showResult(name, item, currentTotal) {
     const box = document.getElementById('display-box');
     const isLoss = item.value < 0;
-    const valText = isLoss ? `<span class="minus">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
+    const valText = isLoss ? `<span class=\"minus\">${item.value.toLocaleString()} G</span>` : `+${item.value.toLocaleString()} G`;
     
-    let displayTotal = "";
+    let displayTotal = \"\";
     const absTotal = Math.abs(currentTotal);
-    if (absTotal >= 100000000) displayTotal = (currentTotal / 100000000).toFixed(2) + " 億";
-    else if (absTotal >= 10000) displayTotal = (currentTotal / 10000).toFixed(1) + " 万";
+    if (absTotal >= 100000000) displayTotal = (currentTotal / 100000000).toFixed(2) + \" 億\";
+    else if (absTotal >= 10000) displayTotal = (currentTotal / 10000).toFixed(1) + \" 万\";
     else displayTotal = currentTotal.toLocaleString();
 
     box.innerHTML = `
-        <div class="user-name">${name}</div>
-        <div class="item-name ${item.class}">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
-        <div class="value-gain">${item.value === 0 ? "ハズレ" : valText}</div>
-        <div class="total-score-container">
-            <div class="total-label">現在の総資産</div>
-            <div class="total-amount" style="${currentTotal < 0 ? 'color: #ff6666;' : ''}">
-                ${displayTotal}<span class="total-unit">G</span>
+        <div class=\"user-name\">${name}</div>
+        <div class=\"item-name ${item.class}\">${isLoss ? '💀' : (item.rank >= 4 ? '💎' : '⛏️')} ${item.item}</div>
+        <div class=\"value-gain\">${item.value === 0 ? \"ハズレ\" : valText}</div>
+        <div class=\"total-score-container\">
+            <div class=\"total-label\">現在の総資産</div>
+            <div class=\"total-amount\" style=\"${currentTotal < 0 ? 'color: #ff6666;' : ''}\">
+                ${displayTotal}<span class=\"total-unit\">G</span>
             </div>
         </div>`;
 }
