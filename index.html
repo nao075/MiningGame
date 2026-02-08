@@ -142,6 +142,10 @@ function startMiningProcess(name, uid) {
             userData[uid].name = name; 
             localStorage.setItem('mining_userData', JSON.stringify(userData));
             
+            // Botに結果を報告させる
+            const resultMsg = `${item.item} を手に入れた！（${item.value.toLocaleString()} G）`;
+            socket.send(`PRIVMSG #${CHANNEL_NAME} :@${name} さん、${resultMsg}`);
+            
             showResult(name, item, userData[uid].balance);
             setTimeout(() => { box.classList.remove('show'); }, 4000);
         }, 3000);
